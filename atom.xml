@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title><![CDATA[逝去日子的博客]]></title>
+  
+  <link href="/atom.xml" rel="self"/>
+  <link href="http://liangliangyy.github.io/"/>
+  <updated>2015-11-21T17:45:38.213Z</updated>
+  <id>http://liangliangyy.github.io/</id>
+  
+  <author>
+    <name><![CDATA[liangliang]]></name>
+    
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title><![CDATA[MVC使用窗体身份验证及角色权限管理]]></title>
+    <link href="http://liangliangyy.github.io/2015/11/22/mvc/"/>
+    <id>http://liangliangyy.github.io/2015/11/22/mvc/</id>
+    <published>2015-11-21T17:45:38.213Z</published>
+    <updated>2015-11-21T17:45:38.213Z</updated>
+    <content type="html"><![CDATA[<h1 id="MVC使用窗体身份验证及角色权限管理">MVC使用窗体身份验证及角色权限管理</h1><p>本文仅使用 <code>ASP.NET</code> 的窗体身份验证，不会使用它的 <code>成员资格（Membership）</code> 和<code>角色管理 （RoleManager）</code>，原因有二：一是不灵活，二是和 MVC 关系不太.  </p>
+<hr>
+<h1 id="用户模型">用户模型</h1><p><code>User</code> 模型类：  </p>
+<pre><code><span class="keyword">public</span> <span class="keyword">class</span> <span class="title">User</span>
+{
+    <span class="keyword">public</span> <span class="keyword">int</span> ID { <span class="keyword">get</span>; <span class="keyword">set</span>; }
+    <span class="keyword">public</span> <span class="keyword">string</span> Name { <span class="keyword">get</span>; <span class="keyword">set</span>; }
+    <span class="keyword">public</span> <span class="keyword">string</span> Password { <span class="keyword">get</span>; <span class="keyword">set</span>; }    
+    <span class="keyword">public</span> <span class="keyword">string</span>[] Roles { <span class="keyword">get</span>; <span class="keyword">set</span>; }
+}
+</code></pre><p><code>UserRepository</code> 为数据存取类，为了演示方便，并没有连接数据库，而是使用一个数组来作为数据源：  </p>
+<pre><code><span class="keyword">public</span> <span class="keyword">class</span> UserRepository
+{
+    <span class="keyword">private</span> <span class="keyword">static</span> User[] usersForTest = <span class="keyword">new</span>[]
+    {
+        <span class="keyword">new</span> User{ ID = <span class="number">1</span>, Name = <span class="string">"bob"</span>, Password = <span class="string">"bob"</span>, Roles = <span class="keyword">new</span> []{<span class="string">"employee"</span>}},
+        <span class="keyword">new</span> User{ ID = <span class="number">2</span>, Name = <span class="string">"tom"</span>, Password = <span class="string">"tom"</span>, Roles = <span class="keyword">new</span> []{<span class="string">"manager"</span>}},
+        <span class="keyword">new</span> User{ ID = <span class="number">3</span>, Name = <span class="string">"admin"</span>, Password = <span class="string">"admin"</span>, Roles = <span class="keyword">new</span>[]{<span class="string">"admin"</span>}},
+    };
+
+    <span class="function"><span class="keyword">public</span> <span class="keyword">bool</span> <span class="title">ValidateUser</span><span class="params">(<span class="built_in">string</span> userName, <span class="built_in">string</span> password)</span>
+    </span>{
+        <span class="keyword">return</span> usersForTest
+            .Any(u =&gt; u.Name == userName &amp;&amp; u.Password == password);
+    }
+
+    <span class="keyword">public</span> <span class="built_in">string</span>[] GetRoles(<span class="built_in">string</span> userName)
+    {
+        <span class="keyword">return</span> usersForTest
+            .Where(u =&gt; u.Name == userName)
+            .Select(u =&gt; u.Roles)
+            .FirstOrDefault();
+    }
+
+    <span class="function"><span class="keyword">public</span> User <span class="title">GetByNameAndPassword</span><span class="params">(<span class="built_in">string</span> name, <span class="built_in">string</span> password)</span>
+    </span>{
+        <span class="keyword">return</span> usersForTest
+            .FirstOrDefault(u =&gt; u.Name == name &amp;&amp; u.Password == password);
+    }
+}
+</code></pre><hr>
+<h1 id="用户登录及身份验证">用户登录及身份验证</h1><h2 id="用户登录">用户登录</h2><h3 id="方式一">方式一</h3><h4 id="登录处理">登录处理</h4><pre><code><span class="list">[<span class="keyword">HttpPost</span>]
+public ActionResult Login<span class="list">(<span class="keyword"><span class="built_in">string</span></span> name,string password)</span>
+{
+    if<span class="list">(<span class="keyword">repository.ValidateUser</span><span class="list">(<span class="keyword">name</span>,password)</span>)</span>
+    {
+        FormsAuthentication.SetAuthCookie<span class="list">(<span class="keyword">name</span>, true)</span><span class="comment">;</span>
+    }
+    return RedirectToAction<span class="list">(<span class="string">"index"</span>, <span class="string">"home"</span>)</span><span class="comment">;</span>
+}</span>
+</code></pre><h4 id="修改_Global-asax">修改 <code>Global.asax</code></h4><pre><code><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">MvcApplication</span> : <span class="title">System</span>.<span class="title">Web</span>.<span class="title">HttpApplication</span>
+</span>{
+    <span class="keyword">public</span> MvcApplication()
+    {
+        AuthorizeRequest += <span class="keyword">new</span> EventHandler(MvcApplication_AuthorizeRequest);
+    }
+
+    <span class="keyword">void</span> MvcApplication_AuthorizeRequest(object sender, EventArgs e)
+    {
+        IIdentity id = Context.User.Identity;
+        <span class="keyword">if</span> (id.IsAuthenticated)
+        {
+            <span class="keyword">var</span> roles = <span class="keyword">new</span> UserRepository().GetRoles(id.Name);
+            Context.User = <span class="keyword">new</span> GenericPrincipal(id, roles);
+        }
+    }
+    <span class="comment">//...</span>
+}
+</code></pre><h3 id="方式二">方式二</h3><h4 id="登录处理-1">登录处理</h4><pre><code><span class="list">[<span class="keyword">HttpPost</span>]
+public ActionResult Login2<span class="list">(<span class="keyword"><span class="built_in">string</span></span> name,string password)</span>
+{
+    User user = repository.GetByNameAndPassword<span class="list">(<span class="keyword">name</span>, password)</span><span class="comment">;</span>
+    if<span class="list">(<span class="keyword">user!=null</span>)</span>
+    {
+        FormsAuthenticationTicket ticket = new FormsAuthenticationTicket<span class="list">(<span class="keyword">1</span>,
+            user.Name,
+            DateTime.Now,
+            DateTime.Now.Add<span class="list">(<span class="keyword">FormsAuthentication.Timeout</span>)</span>,
+            true,
+            user.Roles.Aggregate<span class="list">(<span class="list">(<span class="keyword">i</span>, j)</span> =&gt; i + <span class="string">","</span> + j)</span>
+            )</span><span class="comment">;</span>
+        HttpCookie cookie = new HttpCookie<span class="list">(
+            FormsAuthentication.FormsCookieName,
+            FormsAuthentication.Encrypt<span class="list">(<span class="keyword">ticket</span>)</span>
+            )</span><span class="comment">;</span>
+        Response.Cookies.Add<span class="list">(<span class="keyword">cookie</span>)</span><span class="comment">;</span>
+    }
+    return RedirectToAction<span class="list">(<span class="string">"index"</span>, <span class="string">"home"</span>)</span><span class="comment">;</span>
+}</span>
+</code></pre><h4 id="修改_Global-asax-1">修改 <code>Global.asax</code></h4><pre><code><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">MvcApplication</span> : <span class="title">System</span>.<span class="title">Web</span>.<span class="title">HttpApplication</span>
+</span>{
+    <span class="keyword">public</span> MvcApplication()
+    {
+        AuthorizeRequest += <span class="keyword">new</span> EventHandler(MvcApplication_AuthorizeRequest);
+    }
+
+    <span class="keyword">void</span> MvcApplication_AuthorizeRequest(object sender, EventArgs e)
+    {
+        <span class="keyword">var</span> id = Context.User.Identity <span class="keyword">as</span> FormsIdentity;
+        <span class="keyword">if</span> (id != <span class="literal">null</span> &amp;&amp; id.IsAuthenticated)
+        {
+            <span class="keyword">var</span> roles = id.Ticket.UserData.Split(<span class="string">','</span>);
+            Context.User = <span class="keyword">new</span> GenericPrincipal(id, roles);
+        }
+    }
+    <span class="comment">//...</span>
+} 
+</code></pre><h2 id="登出">登出</h2><pre><code><span class="keyword">public</span> <span class="function">ActionResult <span class="title">LogOff</span><span class="params">()</span>
+</span>{
+    FormsAuthentication.SignOut();
+    <span class="function"><span class="keyword">return</span> <span class="title">RedirectToAction</span><span class="params">(<span class="string">"Index"</span>, <span class="string">"Home"</span>)</span></span>;
+}
+</code></pre><hr>
+<h2 id="角色权限">角色权限</h2><h3 id="默认方式">默认方式</h3><p>在默认方式下,我们可以这样来使用<code>AuthorizeAttribute</code>实现基于角色的权限管理了:</p>
+<pre><code><span class="list">[<span class="keyword">Authorize</span><span class="list">(<span class="keyword">Roles</span> =<span class="string">"admin"</span>)</span>]
+public ActionResult Contact<span class="list">()</span>
+{
+    ViewBag.Message = <span class="string">"Your contact page."</span><span class="comment">;</span>
+
+    return View<span class="list">()</span><span class="comment">;</span>
+}</span>
+</code></pre><h3 id="自定义方式">自定义方式</h3><p>不过我们可以通过自定义实现<code>CustomAuthorizeAttribute</code>来实现更加灵活的角色权限管理,如下:  </p>
+<pre><code><span class="keyword">public</span> <span class="keyword">class</span> <span class="title">CustomAuthorizeAttribute</span> : <span class="title">AuthorizeAttribute</span>
+{
+    <span class="function"><span class="keyword">public</span> <span class="title">CustomAuthorizeAttribute</span>(<span class="params"><span class="keyword">params</span> <span class="keyword">string</span>[] roleKeys</span>)
+    </span>{
+        <span class="keyword">var</span> roles = <span class="keyword">new</span> List&lt;<span class="keyword">string</span>&gt;();
+        <span class="keyword">var</span> allRoles = (NameValueCollection)ConfigurationManager.GetSection(<span class="string">"CustomRoles"</span>);
+        <span class="keyword">foreach</span> (<span class="keyword">var</span> roleKey <span class="keyword">in</span> roleKeys)
+        {
+            roles.AddRange(allRoles[roleKey].Split(<span class="keyword">new</span>[] { <span class="string">','</span> }));
+        }
+        Roles = <span class="keyword">string</span>.Join(<span class="string">","</span>, roles);
+    }
+    <span class="function"><span class="keyword">public</span> <span class="keyword">override</span> <span class="keyword">void</span> <span class="title">OnAuthorization</span>(<span class="params">AuthorizationContext filterContext</span>)
+    </span>{
+        <span class="keyword">base</span>.OnAuthorization(filterContext);
+        <span class="keyword">if</span>(filterContext.Result <span class="keyword">is</span> HttpUnauthorizedResult)
+        {
+            filterContext.Result = <span class="keyword">new</span> RedirectResult(<span class="string">"~/Error/AcessDenied"</span>);
+        }
+    }
+}
+</code></pre><p>  之后在<code>web.config</code>中添加如下配置:  </p>
+<pre><code><span class="tag">&lt;<span class="title">section</span> <span class="attribute">name</span>=<span class="value">"CustomRoles"</span> <span class="attribute">type</span>=<span class="value">"System.Configuration.NameValueFileSectionHandler,System, Version=1.0.3300.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"</span> /&gt;</span>  
+
+...
+<span class="tag">&lt;<span class="title">CustomRoles</span>&gt;</span>
+    <span class="tag">&lt;<span class="title">add</span> <span class="attribute">key</span>=<span class="value">"UsersPagePermission"</span> <span class="attribute">value</span>=<span class="value">"admin,manager,employee"</span> /&gt;</span>
+<span class="tag">&lt;/<span class="title">CustomRoles</span>&gt;</span>
+</code></pre><p>这样的话就可以这样来使用:</p>
+<pre><code>[CustomAuthorize(<span class="string">"UsersPagePermission"</span>)]
+<span class="keyword">public</span> <span class="function">ActionResult <span class="title">About</span><span class="params">()</span>
+</span>{
+    ViewBag.Message = <span class="string">"Your application description page."</span>;
+
+    <span class="function"><span class="keyword">return</span> <span class="title">View</span><span class="params">()</span></span>;
+}
+</code></pre><h1 id="简要说明">简要说明</h1><p><code>MVC</code> 使用 <code>HttpContext.User</code> 属性进行来进行实现身份验证及角色管理，同样 <code>AuthorizeAttribute</code> 也根据 <code>HttpContext.User</code> 进行角色权限验证。</p>
+<p>因些不要在用户登录后，将相关用户信息保存在 <code>Session</code> 中（网上经常看到这种做法），将用户保存在 <code>Session</code> 中是一种非常不好的做法。</p>
+<p>也不要在 <code>Action</code> 中进行角色权限判断，应该使用 <code>AuthorizeAttribute</code> 或它的子类</p>
+]]></content>
+    <summary type="html">
+    <![CDATA[<h1 id="MVC使用窗体身份验证及角色权限管理">MVC使用窗体身份验证及角色权限管理</h1><p>本文仅使用 <code>ASP.NET</code> 的窗体身份验证，不会使用它的 <code>成员资格（Membership）</code> 和<code>角色管理 （R]]>
+    </summary>
+    
+      <category term="MVC" scheme="http://liangliangyy.github.io/tags/MVC/"/>
+    
+      <category term="CSharp" scheme="http://liangliangyy.github.io/categories/CSharp/"/>
+    
+  </entry>
+  
+  <entry>
+    <title><![CDATA[Hello World]]></title>
+    <link href="http://liangliangyy.github.io/2015/11/22/hello-world/"/>
+    <id>http://liangliangyy.github.io/2015/11/22/hello-world/</id>
+    <published>2015-11-21T17:27:30.313Z</published>
+    <updated>2015-11-21T17:08:46.811Z</updated>
+    <content type="html"><![CDATA[<p>Welcome to <a href="http://hexo.io/" target="_blank" rel="external">Hexo</a>! This is your very first post. Check <a href="http://hexo.io/docs/" target="_blank" rel="external">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="http://hexo.io/docs/troubleshooting.html" target="_blank" rel="external">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues" target="_blank" rel="external">GitHub</a>.</p>
+<h2 id="Quick_Start">Quick Start</h2><h3 id="Create_a_new_post">Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo new <span class="string">"My New Post"</span></span><br></pre></td></tr></table></figure>
+<p>More info: <a href="http://hexo.io/docs/writing.html" target="_blank" rel="external">Writing</a></p>
+<h3 id="Run_server">Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
+<p>More info: <a href="http://hexo.io/docs/server.html" target="_blank" rel="external">Server</a></p>
+<h3 id="Generate_static_files">Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
+<p>More info: <a href="http://hexo.io/docs/generating.html" target="_blank" rel="external">Generating</a></p>
+<h3 id="Deploy_to_remote_sites">Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
+<p>More info: <a href="http://hexo.io/docs/deployment.html" target="_blank" rel="external">Deployment</a></p>
+]]></content>
+    <summary type="html">
+    <![CDATA[<p>Welcome to <a href="http://hexo.io/" target="_blank" rel="external">Hexo</a>! This is your very first post. Check <a href="http://hexo.io]]>
+    </summary>
+    
+  </entry>
+  
+</feed>
